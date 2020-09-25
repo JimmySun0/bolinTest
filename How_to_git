@@ -21,5 +21,6 @@ From https://github.com/Xiaolian-Liu/Robotic-Controler
  * branch            Windows    -> FETCH_HEAD
 git log -p FETCH_HEAD 可以查看刚刚取回的更新信息
 
+git clone 从远程仓库克隆项目
 
 
