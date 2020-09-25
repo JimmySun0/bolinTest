@@ -1,0 +1,25 @@
+git add                     将文件加入版本控制
+git remove                  将文件从本控制中移除，相应的本地目录中的文件也会没有
+git commit -a               将所有改动提交
+git status                  查看所有文件的状态
+git log                     查看git的日志信息
+git push origin             将仓库上传到 github 上的 master 分支      
+git branch                  查看本地仓库的分支
+git branch -r               查看远程分支
+
+git push origin master:refs/for/master
+origin：远程主机名  master：本地分支名  refs/for:代码提交到服务器之后是需要经过 
+code review 之后才能进行 merge 的，而 refs/heads 不需要
+最一个master，远程分支名
+
+git fetch <远程主机名> <分支名>
+etc： git fetch origin master
+
+type: git fetch origin Windows
+results：
+From https://github.com/Xiaolian-Liu/Robotic-Controler
+ * branch            Windows    -> FETCH_HEAD
+git log -p FETCH_HEAD 可以查看刚刚取回的更新信息
+
+
+
