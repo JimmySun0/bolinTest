@@ -37,7 +37,7 @@ using std::endl;
 
 
 
-#define FREQUENCY 1000
+#define FREQUENCY 500
 #define CLOCK_TO_USE CLOCK_MONOTONIC
 //#define MEASURE_TIMING
 #define SDO_ACCESSS 1
@@ -63,7 +63,7 @@ static ec_slave_config_t *sc_CDR = NULL;
 static uint8_t *domain0_pd = NULL;
 //ethrcat slave position, vendor and product ID
 #define SLAVE_DRIVE_0   0, 0
-#define CoolDrive0      0x00000153, 0x36483054
+#define CoolDrive0      0x00000153, 0x26483054
 
 extern int run;
 //
@@ -106,10 +106,11 @@ static unsigned int counter = 0;
 static unsigned int state_of_the_drive = 0;
 static unsigned int sync_ref_counter = 0;
 const struct timespec cycletime = {0, PERIOD_NS};
-int32_t actualPosition = 0;
+int32_t actualPosition = 100;
 int32_t targetPosition = 0;
 uint16_t controlWord;
 uint16_t statusWord;
+int offset = -30000;
 
 ec_pdo_entry_info_t slave_0_pdo_entries[] = {
     {0x6040, 0x00, 16},
@@ -121,10 +122,10 @@ ec_pdo_entry_info_t slave_0_pdo_entries[] = {
 };
 
 ec_pdo_info_t slave_0_pdos[] = {
-    {0x1602, 2, slave_0_pdo_entries + 0},
+    {0x1601, 2, slave_0_pdo_entries + 0},
     // {0x1602, 3, slave_0_pdo_entries + 0},
 
-    {0x1a02, 2, slave_0_pdo_entries + 2},
+    {0x1a01, 2, slave_0_pdo_entries + 2},
     // {0x1a02, 2, slave_0_pdo_entries + 3},
 
 };
@@ -189,30 +190,29 @@ void inline enable()
 {
     if(0 == run)
     {
-        EC_WRITE_U16(domain0_pd+off_cntlwd,SHUDOWN);
+        controlWord = SHUDOWN;
     }
-    else if (statusWord&0x0008 == 0x0008)
+    else if ((statusWord & 0x0008) == 0x0008)
     {
-        EC_WRITE_U16(domain0_pd+off_cntlwd, FAULT_RESET);
+        controlWord = FAULT_RESET;
     }
-    else if (statusWord&0x004f == 0x0040 )
+    else if ((statusWord & 0x004f) == 0x0040 ) //switch on disable
     {
-        EC_WRITE_U16(domain0_pd+off_cntlwd, SHUDOWN );
+        controlWord = SHUDOWN;
     }
-    else if (statusWord&0x006f == 0x0021)
+    else if ((statusWord & 0x006f) == 0x0021)  // read to switch on 
     {
-        EC_WRITE_U16(domain0_pd+off_cntlwd, SWITCH_ON );
+        controlWord = SWITCH_ON;
     }
-    else if( (statusWord&0x006f) == 0x0023  )   //switch on enable
+    else if((statusWord & 0x006f) == 0x0023  )   //switch on enable
 	{
-        EC_WRITE_S32(domain0_pd+off_tarpos, actualPosition);
-        EC_WRITE_U16(domain0_pd+off_cntlwd, ENABLE_OPERATION );
+        targetPosition = actualPosition; 
+        controlWord = ENABLE_OPERATION;
     }
-    else if (statusWord&0x006f == 0x0027)
-    {
-        EC_WRITE_U16(domain0_pd+off_cntlwd, 0x001f);
-    }
-
+/*     else if ((statusWord&0x006f) == 0x0027)
+    {s
+        controlWord = 0x001f;
+    } */
 }
 
 
@@ -287,8 +287,8 @@ void cyclic_task()
 
             // check for master state (optional)
             check_master_state();
-            printf("")
-            printf("actualPos:\t%d\t",actualPosition);
+            printf("statusWord:\t0x%x\n", statusWord);
+            printf("actualPos:\t%d\n",actualPosition);
 
 #ifdef MEASURE_TIMING
             // output timing stats
@@ -310,9 +310,18 @@ void cyclic_task()
         statusWord = EC_READ_U16(domain0_pd + off_stawrd);
         actualPosition = EC_READ_S32(domain0_pd + off_actpos);
 
+/*         printf("statusWord:\t0x%x\n", statusWord);
+        printf("statusWord & 0x006f:\t0x%x\n", statusWord & 0x006f); */
+
         enable();
 
-        EC_WRITE_S32(domain0_pd+off_tarpos, 100000*sin( 0.5*M_PI* (time.tv_sec + time.tv_nsec/1000000000.0) ) );
+        targetPosition = actualPosition + offset;
+        EC_WRITE_U16(domain0_pd+off_cntlwd, controlWord);
+        EC_WRITE_S32(domain0_pd+off_tarpos, targetPosition);
+
+        
+
+//        EC_WRITE_S32(domain0_pd+off_tarpos, 100000*sin( 0.5*M_PI* (time.tv_sec + time.tv_nsec/1000000000.0) ) );
         
         // write application time to master
         clock_gettime(CLOCK_TO_USE, &time); //this command should be use for sync dc,
@@ -367,11 +376,18 @@ void * ecat_task(void *arg)
 
 
 #if SDO_ACCESSS
+//    if (ecrt_slave_config_sdo32(sc_CDR, 0x6502, 0, 128))  /*set the operation mode 8 RSP */
+//    {
+//        fprintf(stderr, "Failed to configure sdo. \n");
+//        return NULL;
+//    }
+
     if (ecrt_slave_config_sdo8(sc_CDR, 0x6060, 0, 8))  /*set the operation mode 8 RSP */
     {
         fprintf(stderr, "Failed to configure sdo. \n");
         return NULL;
     }
+
 #endif
 
 #if CONFIGURE_PDOS
