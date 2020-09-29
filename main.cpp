@@ -44,6 +44,7 @@ using namespace std;
 static int latency_target_fd;
 int32_t latency_target_value = 0;
 int run = 1;
+int32_t destinePosition = 0;
 
 void signal_stop(int sig)
 {
@@ -131,6 +132,15 @@ int main()
         goto out;
     }
 
+    int num;
+    while(cin >> num)
+    {
+        if(0 == num)
+            break;
+
+        destinePosition = num;
+    }
+
     while(run)
     {
         usleep(100000);
@@ -147,4 +157,3 @@ int main()
     cout << "Hello World!" << endl;
     return 0;
 }
-

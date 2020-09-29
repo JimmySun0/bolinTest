@@ -66,6 +66,9 @@ static uint8_t *domain0_pd = NULL;
 #define CoolDrive0      0x00000153, 0x26483054
 
 extern int run;
+extern int destinePosition;
+int oneTime = 0;
+
 //
 // offsets for PDO entries
 static unsigned int off_cntlwd;
@@ -110,7 +113,7 @@ int32_t actualPosition = 100;
 int32_t targetPosition = 0;
 uint16_t controlWord;
 uint16_t statusWord;
-int offset = -30000;
+int offset = 30000;
 
 ec_pdo_entry_info_t slave_0_pdo_entries[] = {
     {0x6040, 0x00, 16},
@@ -200,13 +203,13 @@ void inline enable()
     {
         controlWord = SHUDOWN;
     }
-    else if ((statusWord & 0x006f) == 0x0021)  // read to switch on 
+    else if ((statusWord & 0x006f) == 0x0021)  // read to switch on
     {
         controlWord = SWITCH_ON;
     }
     else if((statusWord & 0x006f) == 0x0023  )   //switch on enable
-	{
-        targetPosition = actualPosition; 
+    {
+        targetPosition = actualPosition;
         controlWord = ENABLE_OPERATION;
     }
 /*     else if ((statusWord&0x006f) == 0x0027)
@@ -215,6 +218,10 @@ void inline enable()
     } */
 }
 
+int sing(int32_t num)
+{
+    return num > 0? 1:-1;
+}
 
 //cyclic tast use to send and receive PDO data
 void cyclic_task()
@@ -309,20 +316,34 @@ void cyclic_task()
 
         statusWord = EC_READ_U16(domain0_pd + off_stawrd);
         actualPosition = EC_READ_S32(domain0_pd + off_actpos);
+        if(0 == oneTime && actualPosition != 0)
+        {
+            destinePosition = actualPosition;
+            oneTime = 1;
+        }
 
 /*         printf("statusWord:\t0x%x\n", statusWord);
         printf("statusWord & 0x006f:\t0x%x\n", statusWord & 0x006f); */
 
         enable();
 
-        targetPosition = actualPosition + offset;
+        if(abs(destinePosition - actualPosition) < 30000)
+        {
+            targetPosition = destinePosition;
+        }
+        else
+        {
+            targetPosition = actualPosition + sing(destinePosition - actualPosition) * 30000;
+        }
+
+//        targetPosition = actualPosition + offset;
         EC_WRITE_U16(domain0_pd+off_cntlwd, controlWord);
         EC_WRITE_S32(domain0_pd+off_tarpos, targetPosition);
 
-        
+
 
 //        EC_WRITE_S32(domain0_pd+off_tarpos, 100000*sin( 0.5*M_PI* (time.tv_sec + time.tv_nsec/1000000000.0) ) );
-        
+
         // write application time to master
         clock_gettime(CLOCK_TO_USE, &time); //this command should be use for sync dc,
 
@@ -354,25 +375,25 @@ void cyclic_task()
 void * ecat_task(void *arg)
 {
     master = ecrt_request_master(0);
-	printf("ecrt_request_master is called \n");
-	if (!master)
+    printf("ecrt_request_master is called \n");
+    if (!master)
     {
         printf("ecrt_request_master failed \n");
-		return NULL;
+        return NULL;
     }
 
-	domain0 = ecrt_master_create_domain(master);
-	if(!domain0)
+    domain0 = ecrt_master_create_domain(master);
+    if(!domain0)
     {
         printf("ecrt_master_create_domain failed \n");
-		return NULL;
+        return NULL;
     }
 
-	if(!(sc_CDR = ecrt_master_slave_config(master, SLAVE_DRIVE_0, CoolDrive0)))
-	{
-		fprintf(stderr, "Failed to get slave configuration. \n");
+    if(!(sc_CDR = ecrt_master_slave_config(master, SLAVE_DRIVE_0, CoolDrive0)))
+    {
+        fprintf(stderr, "Failed to get slave configuration. \n");
         return NULL;
-	}
+    }
 
 
 #if SDO_ACCESSS
@@ -391,41 +412,38 @@ void * ecat_task(void *arg)
 #endif
 
 #if CONFIGURE_PDOS
-	printf("Configuring PDOs...\n");
-	if (ecrt_slave_config_pdos(sc_CDR, EC_END, slave_0_syncs))
-	{
-		fprintf(stderr, "Failed to configure PDOs.\n");
-		return NULL;
-	}
-	printf("configureing PDO is completed!\n");
+    printf("Configuring PDOs...\n");
+    if (ecrt_slave_config_pdos(sc_CDR, EC_END, slave_0_syncs))
+    {
+        fprintf(stderr, "Failed to configure PDOs.\n");
+        return NULL;
+    }
+    printf("configureing PDO is completed!\n");
 #endif
 
-	if( ecrt_domain_reg_pdo_entry_list(domain0, domain0_regs))
-	{
-		fprintf(stderr, "PDO entty registration filed! \n");
-		return NULL;
-	}
+    if( ecrt_domain_reg_pdo_entry_list(domain0, domain0_regs))
+    {
+        fprintf(stderr, "PDO entty registration filed! \n");
+        return NULL;
+    }
 
     // configure SYNC signals for this slave
-	ecrt_slave_config_dc(sc_CDR, 0x0300, PERIOD_NS, cycletime.tv_nsec/2, 0, 0);
+    ecrt_slave_config_dc(sc_CDR, 0x0300, PERIOD_NS, cycletime.tv_nsec/2, 0, 0);
 
-	printf("Activating master...\n");
-	if (ecrt_master_activate(master))
-		return NULL;
+    printf("Activating master...\n");
+    if (ecrt_master_activate(master))
+        return NULL;
 
     ecrt_master_reset(master);
 
-	if( !(domain0_pd = ecrt_domain_data(domain0)))
-	{
-		return NULL;
-	}
+    if( !(domain0_pd = ecrt_domain_data(domain0)))
+    {
+        return NULL;
+    }
 
     printf("Starting cyclic function.\n");
-	cyclic_task();
-	ecrt_release_master(master);
+    cyclic_task();
+    ecrt_release_master(master);
 
-	return NULL;
+    return NULL;
 }
-
-
-
