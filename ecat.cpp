@@ -114,6 +114,7 @@ int32_t targetPosition = 0;
 uint16_t controlWord;
 uint16_t statusWord;
 int offset = 30000;
+double actualAngle = 0;
 
 ec_pdo_entry_info_t slave_0_pdo_entries[] = {
     {0x6040, 0x00, 16},
@@ -223,6 +224,12 @@ int sing(int32_t num)
     return num > 0? 1:-1;
 }
 
+double increment2JointAngle(int32_t inc)
+{
+    double angle = (inc - 3402)*360/( (1<<17)*(-76.95));
+    return angle;
+}
+
 //cyclic tast use to send and receive PDO data
 void cyclic_task()
 {
@@ -316,6 +323,7 @@ void cyclic_task()
 
         statusWord = EC_READ_U16(domain0_pd + off_stawrd);
         actualPosition = EC_READ_S32(domain0_pd + off_actpos);
+        actualAngle = increment2JointAngle(actualPosition);
         if(0 == oneTime && actualPosition != 0)
         {
             destinePosition = actualPosition;
